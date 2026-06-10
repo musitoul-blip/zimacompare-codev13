@@ -217,6 +217,17 @@ def api_abort():
         raise HTTPException(400, "Aucune opération en cours")
     return {"status": "aborting"}
 
+@app.get("/api/scan/dirs")
+def api_scan_dirs(source: Optional[str] = None, filter: Optional[str] = None, refresh: int = 0):
+    if not source or not validate_path(source):
+        raise HTTPException(400, "Source invalide")
+    payload = dirs_payload(source, refresh=bool(refresh))
+    nf = (filter or "").strip().lower()
+    dirs = [d for d in payload["dirs"] if (not nf) or nf in d["name"].lower()]
+    total = sum(d["mp3"] + d["flac"] + d["m4a"] for d in dirs)
+    return {"source": payload["source"], "filter": nf, "count": len(dirs), "total_files": total, "dirs": dirs}
+
+
 @app.post("/api/reset")
 def api_reset():
     update_state(app_state=AppState.IDLE, progress=0, total=0, processed=0,
