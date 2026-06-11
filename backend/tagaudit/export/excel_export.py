@@ -1492,6 +1492,8 @@ officiel, sous réserve d'évolution de l'outil.
         (count / total_fichiers) * weight * 100 points, borné par catégorie.
         Retourne (score, [(label, penalty), ...]) trié par pénalité décroissante.
         """
+        from audit import report_model
+        return report_model.compute_health_score(self.audit_results, self.df_main, self.SHEET_GROUPS, self.HEALTH_WEIGHTS)
         total = max(len(self.df_main) if self.df_main is not None else 0, 1)
         score = 100.0
         penalties: List[Tuple[str, float]] = []
@@ -1523,6 +1525,8 @@ officiel, sous réserve d'évolution de l'outil.
 
         Exclut les feuilles informatives (music_tags, genre_stats) et les KPI.
         """
+        from audit import report_model
+        return report_model.compute_top_issues(self.audit_results, self.SHEET_GROUPS, limit)
         excluded_groups = {'cockpit', 'donnees', 'kpi'}
         issues = []
         for group_name, sheets in self.SHEET_GROUPS.items():

@@ -219,3 +219,14 @@ def build_tag_export():
     except Exception:
         dest = src
     return str(dest)
+
+
+def build_tag_report_html():
+    # F15: genere le rapport HTML d'audit ZimaTAG (string). Bloque si operation en cours.
+    state = get_state()
+    if state['app_state'] not in (AppState.IDLE, AppState.ERROR):
+        raise RuntimeError('Operation en cours -- attendez la fin du scan-tag')
+    if '/app/tagaudit' not in sys.path:
+        sys.path.insert(0, '/app/tagaudit')
+    from export import export_to_html
+    return export_to_html()

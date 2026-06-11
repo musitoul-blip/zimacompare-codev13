@@ -1136,6 +1136,22 @@ def api_tag_export():
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+@app.get('/api/tag/report.html')
+def api_tag_report():
+    info = tag_result_info()
+    if not info.get('exists') or not info.get('rows'):
+        raise HTTPException(400, 'Aucun master_scan.csv -- lancez un scan-tag au prealable')
+    try:
+        from tagscan import build_tag_report_html
+        html = build_tag_report_html()
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        raise HTTPException(500, 'Rapport HTML: %s' % e)
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
+
+
 @app.get("/api/tag/dirs")
 def api_tag_dirs(refresh: int = 0, source: Optional[str] = None):
     """Index des sous-dossiers de la source (comptage par format) pour le
