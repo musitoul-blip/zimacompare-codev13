@@ -113,7 +113,14 @@ def _exec_action(action, dry_run, verify, target_root, guard=None) -> SyncAction
         elif action.action == "copy":
             _interruptible_copy(action.source_path, action.target_path)
             if verify and not verify_copy(Path(action.source_path), Path(action.target_path)):
-                raise RuntimeError("Vérification post-copie échouée")
+                try:
+                    _tp = Path(action.target_path)
+                    if _tp.exists():
+                        _tp.unlink()
+                        logger.warning(f"[SYNC] RC5 copie non vérifiée supprimée de la cible : {action.relative_path}")
+                except Exception as _de:
+                    logger.error(f"[SYNC] RC5 échec suppression copie suspecte {action.relative_path}: {_de}")
+                raise RuntimeError("Vérification post-copie échouée — copie supprimée de la cible (RC5)")
         elif action.action == "delete":
             p = Path(action.target_path)
             if p.exists(): p.unlink()

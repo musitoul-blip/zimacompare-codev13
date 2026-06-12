@@ -268,7 +268,11 @@ export default function TabZimatag({ status }) {
               </div>
             </div>
           )}
-          <button style={{ ...btn, background: '#28A745', color: '#fff' }} onClick={downloadExcel} disabled={exporting}>{exporting ? 'Génération…' : '📊 Télécharger l\'audit Excel'}</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button style={{ ...btn, background: '#28A745', color: '#fff' }} onClick={downloadExcel} disabled={exporting}>{exporting ? 'Génération…' : '📊 Télécharger l\'audit Excel'}</button>
+            <button style={{ ...btn, background: '#1F4E79', color: '#fff' }} onClick={() => window.open('/api/tag/report.html', '_blank')}>📄 Rapport HTML</button>
+          </div>
+          <div style={{ ...muted, marginTop: 8, fontSize: 12 }}>Ouvrir directement : <a href="/api/tag/export.xlsx" style={{ color: '#2E86AB' }}>📊 Excel</a> · <a href="/api/tag/report.html" target="_blank" rel="noopener" style={{ color: '#2E86AB' }}>📄 Rapport HTML</a></div>
         </div>
       )}
     </div>
