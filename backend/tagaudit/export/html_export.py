@@ -29,11 +29,11 @@ except Exception:
 
 DANGER_KEYS = {
     "covers_invalid", "missing_metadata", "duplicates_md5",
-    "duplicates_artist_title", "incomplete_albums", "duration_zero",
+    "incomplete_albums", "duration_zero",
 }
 # Audits INFORMATIFS (listings/recaps, pas des defauts) : exclus du comptage
 # des problemes, des badges d'onglet et des flags "Par dossier".
-INFO_KEYS = {"cover_size", "quality_analysis"}
+INFO_KEYS = {"cover_size", "quality_analysis", "albumartist_vs_artist", "duplicates_artist_title"}
 GROUP_LABELS = {
     "qualite": "Qualite", "integrite": "Integrite", "metadonnees": "Metadonnees",
     "doublons": "Doublons", "casse": "Casse", "images": "Pochettes", "donnees": "Donnees",
@@ -255,6 +255,50 @@ def _table_html(df):
     return t
 
 
+LINK_DROP = {
+    "bitrate_anomalies": set(),
+    "albumartist_vs_artist": set(),
+    "duplicates_artist_title": {"file_md5"},
+}
+
+
+def _links_cell(folder):
+    win = _win(folder)
+    winj = win.replace("\\", "\\\\").replace("'", "\\'")
+    return (
+        f"<div class='zpathline'><span class='zpath'>{_html.escape(win)}</span>"
+        f"<button class='zbtn zmini' onclick=\"ztCopy(this,'{winj}')\">copier</button>"
+        f"<a class='zlink' href=\"{_html.escape(_file_uri(win))}\">ouvrir</a>"
+        f"<a class='zlink zezcd' href=\"{_html.escape(_ezcd_uri(win))}\" title='ouvrir ce dossier dans Mp3tag'>Mp3tag</a></div>"
+    )
+
+
+def _table_html_links(df, data_key):
+    folder_col = "filepath"
+    if folder_col not in df.columns:
+        return _table_html(df)
+    drop = LINK_DROP.get(data_key, set())
+    shown = df.head(ROW_CAP)
+    keep = [c for c in shown.columns if c != folder_col and c not in drop]
+    out = ["<table class='ztbl'><thead><tr>"]
+    for c in keep:
+        out.append("<th>%s</th>" % _html.escape(str(c)))
+    out.append("<th>Dossier</th></tr></thead><tbody>")
+    for _, row in shown.iterrows():
+        out.append("<tr>")
+        for c in keep:
+            v = row[c]
+            cell = "" if pd.isna(v) else str(v)
+            out.append("<td>%s</td>" % _html.escape(cell))
+        folder = os.path.dirname(str(row.get(folder_col, "")))
+        out.append("<td>%s</td>" % _links_cell(folder))
+        out.append("</tr>")
+    out.append("</tbody></table>")
+    if len(df) > ROW_CAP:
+        out.append("<p class='zmut'>%d lignes au total, %d affichees.</p>" % (len(df), ROW_CAP))
+    return "".join(out)
+
+
 # ----------------------------------------------------------------------
 # Rendu
 # ----------------------------------------------------------------------
@@ -376,7 +420,8 @@ def export_to_html():
                      f"<span class='zb {badge_cls}'>{n}</span></div>")
             if isinstance(data, pd.DataFrame) and not data.empty:
                 p.append("<input class='zflt' placeholder='filtrer...' oninput='ztTblFilter(this)'>")
-                p.append("<div class='ztw'>" + _table_html(data) + "</div>")
+                _tbl = _table_html_links(data, data_key) if data_key in LINK_DROP else _table_html(data)
+                p.append("<div class='ztw'>" + _tbl + "</div>")
             else:
                 p.append("<p class='zmut'>Rien a signaler.</p>")
             p.append("</div>")
@@ -413,7 +458,7 @@ color:var(--zmut);cursor:pointer}
 .ztab.active{color:var(--zfg);border-bottom-color:var(--zfg)}
 .zcnt{font-size:11px;background:#fdecea;color:#C62828;border-radius:20px;padding:1px 7px;margin-left:2px}
 .zt.dark .zcnt{background:#3a1f1f;color:#f09595}
-.zpanel{display:none;padding:18px 26px 40px;max-width:1180px}
+.zpanel{display:none;padding:18px 26px 40px;max-width:none}
 .zpanel.active{display:block}
 .zgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .zcard{background:var(--zsurf);border:1px solid var(--zborder);border-radius:14px;padding:14px 16px;margin-bottom:14px}
@@ -440,8 +485,8 @@ background:var(--zsurf);margin-bottom:10px}
 .zt.dark .zb-ok{background:#16301f;color:#9fe1cb}
 .zpathline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
 .zpath{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--zmut);background:var(--zbg);
-padding:4px 8px;border-radius:6px;border:1px solid var(--zborder);overflow:hidden;text-overflow:ellipsis;
-white-space:nowrap;max-width:100%}
+padding:4px 8px;border-radius:6px;border:1px solid var(--zborder);
+white-space:normal;overflow-wrap:anywhere;max-width:100%}
 .zbtn{background:transparent;border:1px solid var(--zborder);color:var(--zfg);border-radius:8px;padding:5px 10px;
 font-size:12px;cursor:pointer}
 .zbtn:hover{background:var(--zbg)}
@@ -453,8 +498,8 @@ font-size:12px;cursor:pointer}
 table.ztbl{border-collapse:collapse;width:100%;font-size:12.5px}
 table.ztbl thead th{position:sticky;top:0;background:var(--zbg);color:var(--zfg);text-align:left;padding:7px 9px;
 border-bottom:1px solid var(--zborder);white-space:nowrap;cursor:pointer}
-table.ztbl tbody td{padding:6px 9px;border-bottom:1px solid var(--zborder);max-width:360px;overflow:hidden;
-text-overflow:ellipsis;white-space:nowrap}
+table.ztbl tbody td{padding:6px 9px;border-bottom:1px solid var(--zborder);max-width:480px;
+white-space:normal;overflow-wrap:anywhere;vertical-align:top}
 footer{text-align:center;font-size:12px;padding:22px 12px}
 """
 

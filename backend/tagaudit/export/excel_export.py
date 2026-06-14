@@ -154,7 +154,7 @@ class ExcelExporter:
     # Plus le poids est élevé, plus l'impact négatif sur le score est fort.
     HEALTH_WEIGHTS = {
         'duplicates_md5': 3.0,
-        'duplicates_artist_title': 2.0,
+        'duplicates_artist_title': 0.0,
         'missing_metadata': 2.5,
         'incomplete_albums': 2.0,
         'track_gaps': 1.5,
@@ -165,7 +165,7 @@ class ExcelExporter:
         'genre_inconsistency': 0.8,
         'albumartist_consistency': 1.2,
         'album_name_consistency': 1.2,
-        'albumartist_vs_artist': 0.8,
+        'albumartist_vs_artist': 0.0,
         'missing_genre_albums': 1.0,
         'missing_year_albums': 1.0,
         'case_inconsistency_artist': 0.5,
