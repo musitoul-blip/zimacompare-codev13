@@ -88,7 +88,7 @@ class ExcelExporter:
     # Au-delà de ces limites, la pochette risque de ne pas s'afficher correctement.
     BLUESOUND_MAX_WIDTH = 1200      # pixels
     BLUESOUND_MAX_HEIGHT = 1200     # pixels
-    BLUESOUND_MAX_SIZE_KB = 600    # kilo-octets
+    BLUESOUND_MAX_SIZE_KB = 700    # kilo-octets (F20 : recalibrage poids seul, plancher reel 741 Ko)
 
     # Groupes d'onglets thématiques
     SHEET_GROUPS = {
@@ -395,7 +395,7 @@ class ExcelExporter:
         # --- 3. Pochettes non-JPG ---
         self.audit_results['covers_non_jpg'] = self._compute_covers_non_jpg()
         
-        # --- 4. Pochettes > limites Bluesound Node (600×600 px et/ou 500 Ko) ---
+        # --- 4. Pochettes > limite Bluesound Node (poids > 700 Ko) ---
         self.audit_results['covers_bluesound_oversized'] = \
             self._compute_covers_bluesound_oversized()
 
@@ -510,87 +510,34 @@ class ExcelExporter:
         return df_non_jpg
     
     def _compute_covers_bluesound_oversized(self) -> pd.DataFrame:
-        """Retourne la liste des titres dont la pochette dépasse les limites
-        Bluesound Node (1200×1200 px ET/OU 600 Ko).
-        
-        Pour qu'une pochette s'affiche de façon optimale sur un streamer
-        Bluesound, elle doit idéalement être JPG, 1200×1200 px maximum et
-        moins de 600 Ko.
-        
-        Ce DataFrame inclut tout fichier qui dépasse au moins UNE de ces
-        deux contraintes (pixels OU poids). Une colonne 'raison' indique
-        pourquoi chaque fichier est listé.
-        
-        Nécessite les colonnes cover_width, cover_height et cover_size
-        dans df_main. Si elles manquent (scanner non patché), retourne
-        un DataFrame vide sans erreur.
+        """Pochettes dont le POIDS depasse la limite Bluesound Node (> 700 Ko).
+        F20 (recalibrage) : seul le poids predit un probleme d'affichage ; la
+        dimension en pixels n'est plus un critere (une pochette 3000 px / 369 Ko
+        reste saine). Plancher des cas reels = 741 Ko ; seuil = 700 Ko. Ecart
+        volontaire vs la reference ZimaTAG (qui garde l'ancienne regle px OU poids).
+        Necessite cover_size dans df_main ; sinon DataFrame vide sans erreur.
         """
         df = self.df_main
-        # On a besoin soit des dimensions, soit de la taille. Si aucune
-        # des deux n'est dispo, pas d'analyse possible.
-        has_dims = 'cover_width' in df.columns and 'cover_height' in df.columns
-        has_size = 'cover_size' in df.columns
-        if not has_dims and not has_size:
+        if 'cover_size' not in df.columns:
             return pd.DataFrame()
-        
-        # Fichiers avec pochette uniquement
-        has_cover_mask = (df['has_cover'] == 'Yes') \
-            if 'has_cover' in df.columns else pd.Series(True, index=df.index)
-        
-        # Conversion numérique robuste (ignore les NaN et les strings)
         def _to_int_series(s):
             return pd.to_numeric(s, errors='coerce').fillna(0).astype(int)
-        
-        # Masque "trop grand en pixels"
-        oversize_dim_mask = pd.Series(False, index=df.index)
-        if has_dims:
-            w = _to_int_series(df['cover_width'])
-            h = _to_int_series(df['cover_height'])
-            oversize_dim_mask = (w > self.BLUESOUND_MAX_WIDTH) | \
-                                (h > self.BLUESOUND_MAX_HEIGHT)
-        
-        # Masque "trop lourd en octets" (cover_size est en octets dans le CSV)
-        oversize_size_mask = pd.Series(False, index=df.index)
-        if has_size:
-            size_bytes = _to_int_series(df['cover_size'])
-            oversize_size_mask = size_bytes > (self.BLUESOUND_MAX_SIZE_KB * 1024)
-        
-        combined_mask = has_cover_mask & (oversize_dim_mask | oversize_size_mask)
+        has_cover_mask = (df['has_cover'] == 'Yes') \
+            if 'has_cover' in df.columns else pd.Series(True, index=df.index)
+        size_bytes = _to_int_series(df['cover_size'])
+        oversize_size_mask = size_bytes > (self.BLUESOUND_MAX_SIZE_KB * 1024)
+        combined_mask = has_cover_mask & oversize_size_mask
         if not combined_mask.any():
             return pd.DataFrame()
-        
         df_over = df[combined_mask].copy()
-        
-        # Calcule une colonne "raison" lisible
         def _compute_reason(row):
-            reasons = []
-            if has_dims:
-                try:
-                    w = int(pd.to_numeric(row.get('cover_width'), errors='coerce') or 0)
-                    h = int(pd.to_numeric(row.get('cover_height'), errors='coerce') or 0)
-                    if w > self.BLUESOUND_MAX_WIDTH or h > self.BLUESOUND_MAX_HEIGHT:
-                        reasons.append(f'{w}×{h}px > {self.BLUESOUND_MAX_WIDTH}×{self.BLUESOUND_MAX_HEIGHT}')
-                except (TypeError, ValueError):
-                    pass
-            if has_size:
-                try:
-                    s_bytes = int(pd.to_numeric(row.get('cover_size'), errors='coerce') or 0)
-                    s_kb = s_bytes / 1024
-                    if s_bytes > self.BLUESOUND_MAX_SIZE_KB * 1024:
-                        reasons.append(f'{s_kb:.0f} Ko > {self.BLUESOUND_MAX_SIZE_KB} Ko')
-                except (TypeError, ValueError):
-                    pass
-            return ' & '.join(reasons) if reasons else ''
-        
+            try:
+                s_bytes = int(pd.to_numeric(row.get('cover_size'), errors='coerce') or 0)
+            except (TypeError, ValueError):
+                s_bytes = 0
+            return '%.0f Ko > %d Ko' % (s_bytes / 1024.0, self.BLUESOUND_MAX_SIZE_KB)
         df_over['raison'] = df_over.apply(_compute_reason, axis=1)
-        
-        # Ajoute cover_size_kb pour lecture directe
-        if has_size:
-            df_over['cover_size_kb'] = (
-                _to_int_series(df_over['cover_size']) / 1024
-            ).round(1)
-        
-        # Colonnes utiles, dans l'ordre : raison en 2ᵉ pour être visible
+        df_over['cover_size_kb'] = (_to_int_series(df_over['cover_size']) / 1024.0).round(1)
         preferred_cols = [
             'file_path', 'filepath', 'raison',
             'cover_width', 'cover_height', 'cover_size_kb', 'cover_size',
@@ -599,18 +546,12 @@ class ExcelExporter:
         ]
         available = [c for c in preferred_cols if c in df_over.columns]
         df_over = df_over[available]
-        
-        # Tri : raison (pour regrouper) puis artist/album
-        sort_cols = [c for c in ('raison', 'artist', 'album', 'track', 'title')
-                     if c in df_over.columns]
-        if sort_cols:
-            df_over = df_over.sort_values(by=sort_cols).reset_index(drop=True)
-        
+        if 'cover_size_kb' in df_over.columns:
+            df_over = df_over.sort_values(by='cover_size_kb', ascending=False).reset_index(drop=True)
         logger.info(
-            f"[EXPORT] Pochettes hors-normes Bluesound : "
-            f"{len(df_over)} fichiers (seuils : "
-            f"{self.BLUESOUND_MAX_WIDTH}×{self.BLUESOUND_MAX_HEIGHT}px, "
-            f"{self.BLUESOUND_MAX_SIZE_KB} Ko)"
+            "[EXPORT] Pochettes hors-normes Bluesound : "
+            "%d fichiers (seuil : poids > %d Ko)"
+            % (len(df_over), self.BLUESOUND_MAX_SIZE_KB)
         )
         return df_over
 
@@ -734,7 +675,7 @@ class ExcelExporter:
         
         Corrections gérées :
           1. Pochettes non-JPG → conversion en JPEG 500px (Adjust Cover)
-          2. Pochettes > Bluesound → redimensionnement en JPEG 600px (Adjust Cover)
+          2. Pochettes > Bluesound : reduire le poids a <= 700 Ko (Adjust Cover)
         
         Les fichiers ne sont créés que si la correction s'applique
         (DataFrame non vide). Sinon : rien (pas de bruit inutile).
@@ -772,7 +713,7 @@ class ExcelExporter:
                 base_path=base,
                 suffix='FixCovers_Bluesound',
                 mta_params={'1': 1, '2': 600, '3': 100},
-                title='Pochettes > Bluesound → JPEG 600px',
+                title='Pochettes > Bluesound : poids <= 700 Ko',
                 description=(
                     f'Redimensionnement de {len(df_bluesound):,} pochette(s) '
                     f'à 600×600 px maximum, format JPEG, qualité 100. '
